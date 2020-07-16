@@ -68,7 +68,7 @@ where
             range: std::ops::Range<usize>,
             // TODO: How do we reuse these allocations?
             single_labels: Vec<SingleLabel<'diagnostic>>,
-            multi_labels: Vec<(usize, MultiLabel<'diagnostic>)>,
+            multi_labels: Vec<(usize, LabelStyle, MultiLabel<'diagnostic>)>,
         }
 
         // TODO: Make this data structure external, to allow for allocation reuse
@@ -143,14 +143,21 @@ where
                     // to piggyback off its lexicographic comparison implementation.
                     (range.start, range.end).cmp(&(label_start, label_end))
                 }) {
-                    // If the ranges are the same, order the labels as they
-                    // originally were specified in the diagnostic.
-                    Ok(index) => index + 1,
-                    Err(index) => index,
+                    // If the ranges are the same, order the labels in reverse
+                    // to how they were originally specified in the diagnostic.
+                    // This helps with printing in the renderer.
+                    Ok(index) | Err(index) => index,
                 };
 
+                // Ensure that we print at least one caret, even when we
+                // have a zero-length source range.
+                let mut label_range = label_start..label_end;
+                if label_range.len() == 0 {
+                    label_range.end = label_range.start + 1;
+                }
+
                 line.single_labels
-                    .insert(index, (label.style, label_start..label_end, &label.message));
+                    .insert(index, (label.style, label_range, &label.message));
             } else {
                 // Multiple lines
                 //
@@ -182,7 +189,7 @@ where
                         // ```text
                         // 4 │ ╭     case (mod num 5) (mod num 3) of
                         // ```
-                        "" => (label_index, MultiLabel::TopLeft(label.style)),
+                        "" => (label_index, label.style, MultiLabel::TopLeft),
                         // There's source code in the prefix, so run a label
                         // underneath it to get to the start of the range.
                         //
@@ -190,7 +197,7 @@ where
                         // 4 │   fizz₁ num = case (mod num 5) (mod num 3) of
                         //   │ ╭─────────────^
                         // ```
-                        _ => (label_index, MultiLabel::Top(label.style, ..label_start)),
+                        _ => (label_index, label.style, MultiLabel::Top(..label_start)),
                     });
 
                 // Marked lines
@@ -210,7 +217,7 @@ where
                     labeled_file
                         .get_or_insert_line(line_index, line_range, line_number)
                         .multi_labels
-                        .push((label_index, MultiLabel::Left(label.style)));
+                        .push((label_index, label.style, MultiLabel::Left));
                 }
 
                 // Last labeled line
@@ -226,12 +233,11 @@ where
                     .multi_labels
                     .push((
                         label_index,
-                        MultiLabel::Bottom(label.style, ..label_end, &label.message),
+                        label.style,
+                        MultiLabel::Bottom(..label_end, &label.message),
                     ));
             }
         }
-
-        // TODO: Insert `None` spaces in `labeled_files`
 
         // Header and message
         //
@@ -254,7 +260,8 @@ where
         //   │         ^^ expected `Int` but found `String`
         //   │
         // ```
-        for labeled_file in labeled_files {
+        let mut labeled_files = labeled_files.into_iter().peekable();
+        while let Some(labeled_file) = labeled_files.next() {
             let source = files.source(labeled_file.file_id).unwrap();
             let source = source.as_ref();
 
@@ -330,12 +337,22 @@ where
                     }
                 }
             }
-            renderer.render_snippet_empty(
-                outer_padding,
-                self.diagnostic.severity,
-                labeled_file.num_multi_labels,
-                &current_labels,
-            )?;
+
+            // Check to see if we should render a trailing border after the
+            // final line of the snippet.
+            if labeled_files.peek().is_none() && self.diagnostic.notes.is_empty() {
+                // We don't render a border if we are at the final newline
+                // without trailing notes, because it would end up looking too
+                // spaced-out in combination with the final new line.
+            } else {
+                // Render the trailing snippet border.
+                renderer.render_snippet_empty(
+                    outer_padding,
+                    self.diagnostic.severity,
+                    labeled_file.num_multi_labels,
+                    &current_labels,
+                )?;
+            }
         }
 
         // Additional notes

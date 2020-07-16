@@ -87,20 +87,23 @@ mod empty {
     test_emit!(short_no_color);
 }
 
-/// Based on: https://github.com/rust-lang/rust/blob/c20d7eecbc0928b57da8fe30b2ef8528e2bdd5be/src/test/ui/codemap_tests/one_line.stderr
-mod one_line {
+/// Based on:
+/// - https://github.com/rust-lang/rust/blob/c20d7eecbc0928b57da8fe30b2ef8528e2bdd5be/src/test/ui/codemap_tests/one_line.stderr
+mod same_line {
     use super::*;
 
     lazy_static::lazy_static! {
-        static ref TEST_DATA: TestData<'static, SimpleFile<&'static str, String>> = {
-            let file = SimpleFile::new(
+        static ref TEST_DATA: TestData<'static, SimpleFiles<&'static str, String>> = {
+            let mut files = SimpleFiles::new();
+
+            let file_id1 = files.add(
                 "one_line.rs",
                 unindent::unindent(r#"
                     fn main() {
                         let mut v = vec![Some("foo"), Some("bar")];
                         v.push(v.pop().unwrap());
                     }
-                "#)
+                "#),
             );
 
             let diagnostics = vec![
@@ -108,11 +111,11 @@ mod one_line {
                     .with_code("E0499")
                     .with_message("cannot borrow `v` as mutable more than once at a time")
                     .with_labels(vec![
-                        Label::primary((), 71..72)
+                        Label::primary(file_id1, 71..72)
                             .with_message("second mutable borrow occurs here"),
-                        Label::secondary((), 64..65)
+                        Label::secondary(file_id1, 64..65)
                             .with_message("first borrow later used by call"),
-                        Label::secondary((), 66..70)
+                        Label::secondary(file_id1, 66..70)
                             .with_message("first mutable borrow occurs here"),
                     ]),
                 Diagnostic::error()
@@ -122,7 +125,149 @@ mod one_line {
                     ]),
             ];
 
-            TestData { files: file, diagnostics }
+            TestData { files, diagnostics }
+        };
+    }
+
+    test_emit!(rich_color);
+    test_emit!(short_color);
+    test_emit!(rich_no_color);
+    test_emit!(short_no_color);
+}
+
+/// Based on:
+/// - https://github.com/rust-lang/rust/blob/c20d7eecbc0928b57da8fe30b2ef8528e2bdd5be/src/test/ui/nested_impl_trait.stderr
+/// - https://github.com/rust-lang/rust/blob/c20d7eecbc0928b57da8fe30b2ef8528e2bdd5be/src/test/ui/typeck/typeck_type_placeholder_item.stderr
+/// - https://github.com/rust-lang/rust/blob/c20d7eecbc0928b57da8fe30b2ef8528e2bdd5be/src/test/ui/no_send_res_ports.stderr
+mod overlapping {
+    use super::*;
+
+    lazy_static::lazy_static! {
+        static ref TEST_DATA: TestData<'static, SimpleFiles<&'static str, String>> = {
+            let mut files = SimpleFiles::new();
+
+            let file_id1 = files.add(
+                "nested_impl_trait.rs",
+                unindent::unindent(r#"
+                    use std::fmt::Debug;
+
+                    fn fine(x: impl Into<u32>) -> impl Into<u32> { x }
+
+                    fn bad_in_ret_position(x: impl Into<u32>) -> impl Into<impl Debug> { x }
+                "#),
+            );
+            let file_id2 = files.add(
+                "typeck_type_placeholder_item.rs",
+                unindent::unindent(r#"
+                    fn fn_test1() -> _ { 5 }
+                    fn fn_test2(x: i32) -> (_, _) { (x, x) }
+                "#),
+            );
+            let file_id3 = files.add(
+                "libstd/thread/mod.rs",
+                unindent::unindent(r#"
+                    #[stable(feature = "rust1", since = "1.0.0")]
+                    pub fn spawn<F, T>(self, f: F) -> io::Result<JoinHandle<T>>
+                    where
+                        F: FnOnce() -> T,
+                        F: Send + 'static,
+                        T: Send + 'static,
+                    {
+                        unsafe { self.spawn_unchecked(f) }
+                    }
+                "#),
+            );
+            let file_id4 = files.add(
+                "no_send_res_ports.rs",
+                unindent::unindent(r#"
+                    use std::thread;
+                    use std::rc::Rc;
+
+                    #[derive(Debug)]
+                    struct Port<T>(Rc<T>);
+
+                    fn main() {
+                        #[derive(Debug)]
+                        struct Foo {
+                            _x: Port<()>,
+                        }
+
+                        impl Drop for Foo {
+                            fn drop(&mut self) {}
+                        }
+
+                        fn foo(x: Port<()>) -> Foo {
+                            Foo {
+                                _x: x
+                            }
+                        }
+
+                        let x = foo(Port(Rc::new(())));
+
+                        thread::spawn(move|| {
+                            let y = x;
+                            println!("{:?}", y);
+                        });
+                    }
+                "#),
+            );
+
+            let diagnostics = vec![
+                Diagnostic::error()
+                    .with_code("E0666")
+                    .with_message("nested `impl Trait` is not allowed")
+                    .with_labels(vec![
+                        Label::primary(file_id1, 129..139)
+                            .with_message("nested `impl Trait` here"),
+                        Label::secondary(file_id1, 119..140)
+                            .with_message("outer `impl Trait`"),
+                    ]),
+                Diagnostic::error()
+                    .with_code("E0121")
+                    .with_message("the type placeholder `_` is not allowed within types on item signatures")
+                        .with_labels(vec![
+                            Label::primary(file_id2, 17..18)
+                                .with_message("not allowed in type signatures"),
+                            Label::secondary(file_id2, 17..18)
+                                .with_message("help: replace with the correct return type: `i32`"),
+                        ]),
+                Diagnostic::error()
+                    .with_code("E0121")
+                    .with_message("the type placeholder `_` is not allowed within types on item signatures")
+                        .with_labels(vec![
+                            Label::primary(file_id2, 49..50)
+                                .with_message("not allowed in type signatures"),
+                            Label::primary(file_id2, 52..53)
+                                .with_message("not allowed in type signatures"),
+                            Label::secondary(file_id2, 48..54)
+                                .with_message("help: replace with the correct return type: `(i32, i32)`"),
+                        ]),
+                Diagnostic::error()
+                    .with_code("E0277")
+                    .with_message("`std::rc::Rc<()>` cannot be sent between threads safely")
+                    .with_labels(vec![
+                        Label::primary(file_id4, 339..352)
+                            .with_message("`std::rc::Rc<()>` cannot be sent between threads safely"),
+                        Label::secondary(file_id4, 353..416)
+                            .with_message("within this `[closure@no_send_res_ports.rs:29:19: 33:6 x:main::Foo]`"),
+                        Label::secondary(file_id3, 141..145)
+                            .with_message("required by this bound in `std::thread::spawn`"),
+                    ])
+                    .with_notes(vec![
+                        "help: within `[closure@no_send_res_ports.rs:29:19: 33:6 x:main::Foo]`, the trait `std::marker::Send` is not implemented for `std::rc::Rc<()>`".to_owned(),
+                        "note: required because it appears within the type `Port<()>`".to_owned(),
+                        "note: required because it appears within the type `main::Foo`".to_owned(),
+                        "note: required because it appears within the type `[closure@no_send_res_ports.rs:29:19: 33:6 x:main::Foo]`".to_owned(),
+                    ]),
+                Diagnostic::error()
+                    .with_message("aborting due 5 previous errors")
+                    .with_notes(vec![
+                        "Some errors have detailed explanations: E0121, E0277, E0666.".to_owned(),
+                        "For more information about an error, try `rustc --explain E0121`.".to_owned(),
+                    ]),
+            ];
+
+            TestData { files, diagnostics }
         };
     }
 
@@ -185,7 +330,7 @@ mod empty_ranges {
 
     lazy_static::lazy_static! {
         static ref TEST_DATA: TestData<'static, SimpleFile<&'static str, &'static str>> = {
-            let file = SimpleFile::new("hello", "Hello world!\nBye world!");
+            let file = SimpleFile::new("hello", "Hello world!\nBye world!\n   ");
             let eof = file.source().len();
 
             let diagnostics = vec![
@@ -195,6 +340,9 @@ mod empty_ranges {
                 Diagnostic::note()
                     .with_message("end of line")
                     .with_labels(vec![Label::primary((), 12..12).with_message("end of line")]),
+                Diagnostic::note()
+                    .with_message("end of line")
+                    .with_labels(vec![Label::primary((), 23..23).with_message("end of line")]),
                 Diagnostic::note()
                     .with_message("end of file")
                     .with_labels(vec![Label::primary((), eof..eof).with_message("end of file")]),
@@ -483,10 +631,7 @@ mod tabbed {
     fn tab_width_default_no_color() {
         let config = TEST_CONFIG.clone();
 
-        insta::assert_snapshot!(
-            "tab_width_default_no_color",
-            TEST_DATA.emit_no_color(&config)
-        );
+        insta::assert_snapshot!(TEST_DATA.emit_no_color(&config));
     }
 
     #[test]
@@ -510,7 +655,84 @@ mod tabbed {
     }
 }
 
-/// Based on: https://github.com/TheSamsa/rust/blob/75cf41afb468152611212271bae026948cd3ba46/src/test/ui/codemap_tests/unicode.stderr
+mod tab_columns {
+    use super::*;
+
+    lazy_static::lazy_static! {
+        static ref TEST_DATA: TestData<'static, SimpleFiles<&'static str, String>> = {
+            let mut files = SimpleFiles::new();
+
+            let source = [
+                "\thello",
+                "∙\thello",
+                "∙∙\thello",
+                "∙∙∙\thello",
+                "∙∙∙∙\thello",
+                "∙∙∙∙∙\thello",
+                "∙∙∙∙∙∙\thello",
+            ].join("\n");
+            let hello_ranges = source
+                .match_indices("hello")
+                .map(|(start, hello)| start..(start+hello.len()))
+                .collect::<Vec<_>>();
+
+            let file_id = files.add("tab_columns", source);
+
+            let diagnostics = vec![
+                Diagnostic::warning()
+                    .with_message("tab test")
+                    .with_labels(
+                        hello_ranges
+                            .into_iter()
+                            .map(|range| Label::primary(file_id, range))
+                            .collect(),
+                    ),
+            ];
+
+            TestData { files, diagnostics }
+        };
+    }
+
+    #[test]
+    fn tab_width_default_no_color() {
+        let config = TEST_CONFIG.clone();
+
+        insta::assert_snapshot!(TEST_DATA.emit_no_color(&config));
+    }
+
+    #[test]
+    fn tab_width_2_no_color() {
+        let config = Config {
+            tab_width: 2,
+            ..TEST_CONFIG.clone()
+        };
+
+        insta::assert_snapshot!(TEST_DATA.emit_no_color(&config));
+    }
+
+    #[test]
+    fn tab_width_3_no_color() {
+        let config = Config {
+            tab_width: 3,
+            ..TEST_CONFIG.clone()
+        };
+
+        insta::assert_snapshot!(TEST_DATA.emit_no_color(&config));
+    }
+
+    #[test]
+    fn tab_width_6_no_color() {
+        let config = Config {
+            tab_width: 6,
+            ..TEST_CONFIG.clone()
+        };
+
+        insta::assert_snapshot!(TEST_DATA.emit_no_color(&config));
+    }
+}
+
+/// Based on:
+/// - https://github.com/TheSamsa/rust/blob/75cf41afb468152611212271bae026948cd3ba46/src/test/ui/codemap_tests/unicode.stderr
 mod unicode {
     use super::*;
 
@@ -595,14 +817,26 @@ mod unicode_spans {
                     .with_labels(vec![
                         Label::primary((), invalid_start..invalid_end)
                             .with_message("Invalid jump"),
+                    ]),
+                Diagnostic::note()
+                    .with_message("invalid unicode range")
+                    .with_labels(vec![
                         Label::secondary((), invalid_start.."🐄".len())
                             .with_message("Cow range does not start at boundary."),
+                    ]),
+                Diagnostic::note()
+                    .with_message("invalid unicode range")
+                    .with_labels(vec![
                         Label::secondary((), "🐄🌑".len().."🐄🌑🐄".len() - 1)
                             .with_message("Cow range does not end at boundary."),
+                    ]),
+                Diagnostic::note()
+                    .with_message("invalid unicode range")
+                    .with_labels(vec![
                         Label::secondary((), invalid_start.."🐄🌑🐄".len() - 1)
                             .with_message("Cow does not start or end at boundary."),
-
-                    ])];
+                    ]),
+            ];
             TestData{files: file, diagnostics }
         };
     }
