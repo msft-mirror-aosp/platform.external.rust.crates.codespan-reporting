@@ -13,7 +13,7 @@
 [package]
 edition = "2018"
 name = "codespan-reporting"
-version = "0.9.3"
+version = "0.9.5"
 authors = ["Brendan Zabarauskas <bjzaba@yahoo.com.au>"]
 exclude = ["assets/**"]
 description = "Beautiful diagnostic reporting for text-based programming languages"
