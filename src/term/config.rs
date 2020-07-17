@@ -1,4 +1,3 @@
-use std::io;
 use termcolor::{Color, ColorSpec};
 
 use crate::diagnostic::{LabelStyle, Severity};
@@ -28,58 +27,6 @@ impl Default for Config {
             styles: Styles::default(),
             chars: Chars::default(),
         }
-    }
-}
-
-impl Config {
-    /// Measure the width of a string, taking into account the tab width.
-    pub fn width(&self, s: &str) -> usize {
-        use unicode_width::UnicodeWidthChar;
-
-        s.chars()
-            .map(|ch| match ch {
-                '\t' => self.tab_width,
-                _ => ch.width().unwrap_or(0),
-            })
-            .sum()
-    }
-
-    /// Construct a source writer using the current config.
-    pub fn source<'a, W: ?Sized>(&self, writer: &'a mut W) -> SourceWriter<&'a mut W> {
-        SourceWriter {
-            upstream: writer,
-            tab_width: self.tab_width,
-        }
-    }
-}
-
-/// Writer that replaces tab characters with the configured number of spaces.
-pub struct SourceWriter<W> {
-    upstream: W,
-    tab_width: usize,
-}
-
-impl<W: io::Write> io::Write for SourceWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let mut last_term = 0usize;
-        for (i, ch) in buf.iter().enumerate() {
-            if *ch == b'\t' {
-                self.upstream.write_all(&buf[last_term..i])?;
-                last_term = i + 1;
-                write!(
-                    self.upstream,
-                    "{space: >width$}",
-                    space = "",
-                    width = self.tab_width,
-                )?;
-            }
-        }
-        self.upstream.write_all(&buf[last_term..])?;
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.upstream.flush()
     }
 }
 
@@ -279,29 +226,10 @@ pub struct Chars {
     /// The character to use for the left of a multi-line label.
     /// Defaults to: `'│'`.
     pub multi_left: char,
-}
 
-impl Chars {
-    pub fn single_caret_char(&self, label_style: LabelStyle) -> char {
-        match label_style {
-            LabelStyle::Primary => self.single_primary_caret,
-            LabelStyle::Secondary => self.single_secondary_caret,
-        }
-    }
-
-    pub fn multi_caret_char_start(&self, label_style: LabelStyle) -> char {
-        match label_style {
-            LabelStyle::Primary => self.multi_primary_caret_start,
-            LabelStyle::Secondary => self.multi_secondary_caret_start,
-        }
-    }
-
-    pub fn multi_caret_char_end(&self, label_style: LabelStyle) -> char {
-        match label_style {
-            LabelStyle::Primary => self.multi_primary_caret_end,
-            LabelStyle::Secondary => self.multi_secondary_caret_end,
-        }
-    }
+    /// The character to use for the left of a pointer underneath a caret.
+    /// Defaults to: `'│'`.
+    pub pointer_left: char,
 }
 
 impl Default for Chars {
@@ -326,6 +254,8 @@ impl Default for Chars {
             multi_bottom_left: '╰',
             multi_bottom: '─',
             multi_left: '│',
+
+            pointer_left: '│',
         }
     }
 }
