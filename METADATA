@@ -6,8 +6,8 @@ third_party {
     value: "https://crates.io/crates/codespan-reporting"
   }
   url {
-    type: GIT
-    value: "https://github.com/brendanzab/codespan"
+    type: ARCHIVE
+    value: "https://static.crates.io/crates/codespan-reporting/codespan-reporting-0.9.5.crate"
   }
   version: "0.9.5"
   license_type: NOTICE
