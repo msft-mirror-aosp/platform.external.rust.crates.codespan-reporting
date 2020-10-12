@@ -1,5 +1,5 @@
 name: "codespan-reporting"
-description: "Beautiful diagnostic reporting for text-based programming languages."
+description: "Beautiful diagnostic reporting for text-based programming languages"
 third_party {
   url {
     type: HOMEPAGE
