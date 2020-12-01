@@ -17,6 +17,14 @@ pub struct Config {
     pub styles: Styles,
     /// Characters to use when rendering the diagnostic.
     pub chars: Chars,
+    /// The minimum number of lines to be shown after the line on which a multiline [`Label`] begins.
+    ///
+    /// Defaults to: `3`.
+    pub start_context_lines: usize,
+    /// The minimum number of lines to be shown before the line on which a multiline [`Label`] ends.
+    ///
+    /// Defaults to: `1`.
+    pub end_context_lines: usize,
 }
 
 impl Default for Config {
@@ -26,6 +34,8 @@ impl Default for Config {
             tab_width: 4,
             styles: Styles::default(),
             chars: Chars::default(),
+            start_context_lines: 3,
+            end_context_lines: 1,
         }
     }
 }
@@ -49,6 +59,16 @@ pub enum DisplayStyle {
     ///
     /// ```
     Rich,
+    /// Output a condensed diagnostic, with a line number, severity, message and notes (if any).
+    ///
+    /// ```text
+    /// test:2:9: error[E0001]: unexpected type in `+` application
+    /// = expected type `Int`
+    ///      found type `String`
+    ///
+    /// error[E0002]: Bad config found
+    /// ```
+    Medium,
     /// Output a short diagnostic, with a line number, severity, and message.
     ///
     /// ```text
