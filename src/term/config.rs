@@ -20,10 +20,14 @@ pub struct Config {
     /// The minimum number of lines to be shown after the line on which a multiline [`Label`] begins.
     ///
     /// Defaults to: `3`.
+    ///
+    /// [`Label`]: crate::diagnostic::Label
     pub start_context_lines: usize,
     /// The minimum number of lines to be shown before the line on which a multiline [`Label`] ends.
     ///
     /// Defaults to: `1`.
+    ///
+    /// [`Label`]: crate::diagnostic::Label
     pub end_context_lines: usize,
 }
 
@@ -193,19 +197,19 @@ impl Default for Styles {
 }
 
 /// Characters to use when rendering the diagnostic.
+///
+/// By using [`Chars::ascii()`] you can switch to an ASCII-only format suitable
+/// for rendering on terminals that do not support box drawing characters.
 #[derive(Clone, Debug)]
 pub struct Chars {
-    /// The character to use for the top-left border of the source.
-    /// Defaults to: `'┌'`.
-    pub source_border_top_left: char,
-    /// The character to use for the top border of the source.
-    /// Defaults to: `'─'`.
-    pub source_border_top: char,
+    /// The characters to use for the top-left border of the snippet.
+    /// Defaults to: `"┌─"` or `"-->"` with [`Chars::ascii()`].
+    pub snippet_start: String,
     /// The character to use for the left border of the source.
-    /// Defaults to: `'│'`.
+    /// Defaults to: `'│'` or `'|'` with [`Chars::ascii()`].
     pub source_border_left: char,
     /// The character to use for the left border break of the source.
-    /// Defaults to: `'·'`.
+    /// Defaults to: `'·'` or `'.'` with [`Chars::ascii()`].
     pub source_border_left_break: char,
 
     /// The character to use for the note bullet.
@@ -232,31 +236,37 @@ pub struct Chars {
     /// Defaults to: `'\''`.
     pub multi_secondary_caret_end: char,
     /// The character to use for the top-left corner of a multi-line label.
-    /// Defaults to: `'╭'`.
+    /// Defaults to: `'╭'` or `'/'` with [`Chars::ascii()`].
     pub multi_top_left: char,
     /// The character to use for the top of a multi-line label.
-    /// Defaults to: `'─'`.
+    /// Defaults to: `'─'` or `'-'` with [`Chars::ascii()`].
     pub multi_top: char,
     /// The character to use for the bottom-left corner of a multi-line label.
-    /// Defaults to: `'╰'`.
+    /// Defaults to: `'╰'` or `'\'` with [`Chars::ascii()`].
     pub multi_bottom_left: char,
     /// The character to use when marking the bottom of a multi-line label.
-    /// Defaults to: `'─'`.
+    /// Defaults to: `'─'` or `'-'` with [`Chars::ascii()`].
     pub multi_bottom: char,
     /// The character to use for the left of a multi-line label.
-    /// Defaults to: `'│'`.
+    /// Defaults to: `'│'` or `'|'` with [`Chars::ascii()`].
     pub multi_left: char,
 
     /// The character to use for the left of a pointer underneath a caret.
-    /// Defaults to: `'│'`.
+    /// Defaults to: `'│'` or `'|'` with [`Chars::ascii()`].
     pub pointer_left: char,
 }
 
 impl Default for Chars {
     fn default() -> Chars {
+        Chars::box_drawing()
+    }
+}
+
+impl Chars {
+    /// A character set that uses Unicode box drawing characters.
+    pub fn box_drawing() -> Chars {
         Chars {
-            source_border_top_left: '┌',
-            source_border_top: '─',
+            snippet_start: "┌─".into(),
             source_border_left: '│',
             source_border_left_break: '·',
 
@@ -276,6 +286,36 @@ impl Default for Chars {
             multi_left: '│',
 
             pointer_left: '│',
+        }
+    }
+
+    /// A character set that only uses ASCII characters.
+    ///
+    /// This is useful if your terminal's font does not support box drawing
+    /// characters well and results in output that looks similar to rustc's
+    /// diagnostic output.
+    pub fn ascii() -> Chars {
+        Chars {
+            snippet_start: "-->".into(),
+            source_border_left: '|',
+            source_border_left_break: '.',
+
+            note_bullet: '=',
+
+            single_primary_caret: '^',
+            single_secondary_caret: '-',
+
+            multi_primary_caret_start: '^',
+            multi_primary_caret_end: '^',
+            multi_secondary_caret_start: '\'',
+            multi_secondary_caret_end: '\'',
+            multi_top_left: '/',
+            multi_top: '-',
+            multi_bottom_left: '\\',
+            multi_bottom: '-',
+            multi_left: '|',
+
+            pointer_left: '|',
         }
     }
 }
