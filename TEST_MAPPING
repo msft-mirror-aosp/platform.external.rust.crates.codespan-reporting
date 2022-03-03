@@ -2,6 +2,9 @@
 {
   "presubmit": [
     {
+      "name": "diced_test"
+    },
+    {
       "name": "keystore2_test"
     },
     {
@@ -12,6 +15,9 @@
     }
   ],
   "presubmit-rust": [
+    {
+      "name": "diced_test"
+    },
     {
       "name": "keystore2_test"
     },
